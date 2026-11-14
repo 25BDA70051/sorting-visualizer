@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Full Step-by-Step Sorting Visualizer</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:Arial,sans-serif;background:#07111f;color:#eaf2ff;overflow-x:hidden}
+header{padding:14px 20px;background:#0d1b2e;border-bottom:1px solid #29415e;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0 20px 0 0}.controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+button,input,select{background:#142943;color:#fff;border:1px solid #365271;border-radius:7px;padding:8px 11px}
+button{cursor:pointer}button:hover{background:#1c3a5d}.danger{background:#4b2330}
+main{padding:14px}.common{background:#0d1b2e;border:1px solid #29415e;border-radius:10px;padding:12px;margin-bottom:14px}
+.common h2{font-size:15px;margin:0 0 9px}.array{display:flex;gap:5px;flex-wrap:wrap}
+.num{min-width:34px;text-align:center;padding:7px 5px;background:#172e49;border-radius:5px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.card{background:#0d1b2e;border:1px solid #29415e;border-radius:10px;padding:12px;min-height:500px}
+.card h2{margin:0 0 7px;font-size:18px}.sub{font-size:12px;color:#9db3ca;margin-bottom:9px}
+.bars{height:135px;display:flex;align-items:end;gap:3px;padding:8px;background:#081522;border-radius:8px}
+.bar{flex:1;background:#4d8dcc;border-radius:3px 3px 0 0;position:relative;min-width:4px}.bar span{position:absolute;bottom:100%;font-size:9px;width:100%;text-align:center;color:#cfe4ff}
+.bar.compare{background:#e5b34f}.bar.change{background:#62c58b}.bar.pivot{background:#d97979}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}.box{background:#081522;border-radius:7px;padding:8px;min-height:57px}.label{font-size:10px;color:#8ea6bf;text-transform:uppercase}.value{font-size:13px;margin-top:4px}
+.complex{font-size:11px;color:#a9bdd1;margin-top:8px}.history{margin-top:8px;max-height:115px;overflow:auto;background:#081522;border-radius:7px;padding:7px;font-size:11px;line-height:1.55}
+.history div{border-bottom:1px solid #16283b;padding:2px 0}.next{color:#74d7ff}
+.previous-history{margin-top:9px;background:#06111d;border:1px solid #31506d;border-radius:8px;padding:9px}
+.previous-history-list{max-height:180px;overflow:auto}
+.history-item{padding:6px 7px;border-bottom:1px solid #193047;font-size:11px;line-height:1.45}
+.history-item:last-child{border-bottom:0}
+.history-item .hstep{color:#74d7ff;font-weight:bold}
+.history-item .harray{font-family:monospace;color:#d8e8f7}
+.execution{margin-top:9px;background:#06111d;border:1px solid #31506d;border-radius:8px;padding:9px}
+.exec-title{font-weight:bold;font-size:12px;color:#74d7ff;margin-bottom:7px}
+.exec-block{background:#0b1a2b;border-radius:7px;padding:7px;margin-top:6px}
+.exec-block.current{border:1px solid #3d7198}
+.exec-heading{font-size:11px;font-weight:bold;text-transform:uppercase;color:#9fc1df;margin-bottom:4px}
+.exec-line{font-size:12px;line-height:1.5;margin:2px 0}
+.exec-array{font-family:monospace;font-size:13px;margin-top:5px;background:#10243a;padding:7px;border-radius:5px}.metrics{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.metric{font-size:11px;background:#13263d;padding:5px 8px;border-radius:5px}
+.full:fullscreen{padding:0;overflow:auto}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+<h1>Sorting Visualizer — Full Process</h1>
+<div class="controls">
+<button onclick="newArray()">Generate New Array</button>
+<button onclick="prev()">Previous Step</button>
+<button onclick="next()">Next Step</button>
+<button onclick="play()">▶ Play</button>
+<button onclick="pause()">⏸ Pause</button>
+<button onclick="reset()">Reset</button>
+<button onclick="toggleFull()">⛶ Full Screen</button>
+<label>Size <input id="size" type="number" min="4" max="14" value="8" style="width:58px"></label>
+<label>Speed <input id="speed" type="range" min="100" max="1200" value="500"></label>
+</div>
+</header>
+
+<main>
+<div class="common">
+<h2>Original Array — same input for every algorithm</h2>
+<div id="original" class="array"></div>
+<div class="metrics"><span class="metric">Global Step: <b id="globalStep">0</b></span><span class="metric">Playing: <b id="playing">No</b></span></div>
+</div>
+<div class="common">
+<h2>Detailed Step Trace</h2>
+<div style="font-size:12px;color:#a9bdd1">
+Press <b>Next Step</b> to see one operation at a time: <b>Compare → Action → Array</b>.
+Merge Sort additionally shows <b>Divide → Sort → Merge</b> step by step.
+</div>
+</div>
+<div class="grid" id="grid"></div>
+</main>
+</div>
+
+<script>
+let base=[], pos=0, timer=null, speed=500;
+const names=["Bubble Sort","Selection Sort","Insertion Sort","Quick Sort","Merge Sort"];
+
+function randArray(n){let a=[];for(let i=0;i<n;i++)a.push(Math.floor(Math.random()*90)+10);return a}
+function clone(a){return a.slice()}
+function ev(text,arr,compare=[],change=[],extra={}){return {text,arr:clone(arr),compare,change,...extra}}
+
+function bubble(src){
+ let a=clone(src), E=[ev("Start: unsorted array",a)];
+ for(let i=a.length-1;i>0;i--){
+  E.push(ev("Start pass "+(a.length-i),a));
+  let swapped=false;
+  for(let j=0;j<i;j++){
+   E.push(ev(`Compare adjacent ${a[j]} and ${a[j+1]}`,a,[j,j+1]));
+   if(a[j]>a[j+1]){
+    [a[j],a[j+1]]=[a[j+1],a[j]];swapped=true;
+    E.push(ev(`Swap`,a,[],[j,j+1]));
+   } else {
+    E.push(ev(`No Swap`,a,[j,j+1]));
+   }
+  }
+  E.push(ev(`Pass complete: largest value fixed at position ${i}`,a));
+  if(!swapped)break;
+ }
+ E.push(ev("Finished — array sorted",a));return E
+}
+function selection(src){
+ let a=clone(src),E=[ev("Start: unsorted array",a)];
+ for(let i=0;i<a.length-1;i++){
+  let m=i;E.push(ev(`Find minimum for position ${i}`,a,[i]));
+  for(let j=i+1;j<a.length;j++){
+   E.push(ev(`Compare current minimum ${a[m]} with ${a[j]}`,a,[m,j]));
+   if(a[j]<a[m]){m=j;E.push(ev(`New minimum found: ${a[m]}`,a,[m]))}
+  }
+  if(m!==i){[a[i],a[m]]=[a[m],a[i]];E.push(ev(`Swap minimum into position ${i}`,a,[],[i,m]))}
+  else E.push(ev(`Position ${i} already contains minimum`,a));
+ }
+ E.push(ev("Finished — array sorted",a));return E
+}
+function insertion(src){
+ let a=clone(src),E=[ev("Start: unsorted array",a)];
+ for(let i=1;i<a.length;i++){
+  let key=a[i],j=i;E.push(ev(`Take key = ${key}`,a,[i],[],{key:i}));
+  while(j>0){
+   E.push(ev(`Compare key ${key} with ${a[j-1]}`,a,[j-1,j],[],{key:i}));
+   if(a[j-1]>key){a[j]=a[j-1];j--;E.push(ev(`Shift ${a[j]} one position right`,a,[],[j,j+1],{key:i}))}
+   else break;
+  }
+  a[j]=key;E.push(ev(`Insert key ${key} at position ${j}`,a,[],[j],{key:j}));
+ }
+ E.push(ev("Finished — array sorted",a));return E
+}
+function quick(src){
+ let a=clone(src),E=[ev("Start: unsorted array",a)];
+ function part(l,r,depth){
+  if(l>r)return;
+  if(l===r){E.push(ev(`Single element [${a[l]}] — already sorted`,a,[l],[],{range:[l,r]}));return}
+  let p=r,pv=a[p],i=l;
+  E.push(ev(`Choose pivot = ${pv}; partition [${l}..${r}]`,a,[p],[],{pivot:p,range:[l,r]}));
+  for(let j=l;j<r;j++){
+   E.push(ev(`Compare ${a[j]} with pivot ${pv}`,a,[j,p],[],{pivot:p,range:[l,r]}));
+   if(a[j]<pv){[a[i],a[j]]=[a[j],a[i]];E.push(ev(`Move ${a[i]} left of pivot`,a,[],[i,j],{pivot:p,range:[l,r]}));i++}
+  }
+  [a[i],a[p]]=[a[p],a[i]];
+  E.push(ev(`Place pivot ${pv} at index ${i}`,a,[],[i,p],{pivot:i,range:[l,r]}));
+  if(l<i-1)E.push(ev(`Next recursive part: LEFT [${l}..${i-1}]`,a,[],[],{range:[l,i-1]}));
+  part(l,i-1,depth+1);
+  if(i+1<r)E.push(ev(`Next recursive part: RIGHT [${i+1}..${r}]`,a,[],[],{range:[i+1,r]}));
+  part(i+1,r,depth+1);
+ }
+ part(0,a.length-1,0);E.push(ev("Finished — array sorted",a));return E
+}
+function merge(src){
+ let a=clone(src),E=[ev("Start: unsorted array",a)];
+ function mergeRange(l,m,r){
+  let L=a.slice(l,m+1),R=a.slice(m+1,r+1);
+  E.push(ev(`MERGE [${L.join(", ")}] + [${R.join(", ")}]`,a,[],[],{segments:[[l,m],[m+1,r]]}));
+  let i=0,j=0,k=l;
+  while(i<L.length&&j<R.length){
+   E.push(ev(`Compare ${L[i]} and ${R[j]}`,a,[],[],{mergeCompare:[L[i],R[j]]}));
+   if(L[i]<=R[j])a[k++]=L[i++];else a[k++]=R[j++];
+   E.push(ev(`Place next smallest value into index ${k-1}`,a,[],[k-1]));
+  }
+  while(i<L.length){a[k]=L[i];E.push(ev(`Copy remaining ${L[i]}`,a,[],[k]));i++;k++}
+  while(j<R.length){a[k]=R[j];E.push(ev(`Copy remaining ${R[j]}`,a,[],[k]));j++;k++}
+  E.push(ev(`Merged result: [${a.slice(l,r+1).join(", ")}]`,a,[],[],{merged:[l,r]}));
+ }
+ function sort(l,r,level=0){
+  if(l>=r){E.push(ev(`Single element [${a[l]}] — stop dividing`,a,[l],[],{range:[l,r]}));return}
+  let m=Math.floor((l+r)/2);
+  E.push(ev(`DIVIDE [${a.slice(l,r+1).join(", ")}] → LEFT [${a.slice(l,m+1).join(", ")}] | RIGHT [${a.slice(m+1,r+1).join(", ")}]`,a,[],[],{split:[l,m,r]}));
+  sort(l,m,level+1);sort(m+1,r,level+1);
+  mergeRange(l,m,r);
+ }
+ sort(0,a.length-1);E.push(ev("FINAL MERGE COMPLETE — array sorted",a));return E
+}
+function allEvents(){return [bubble(base),selection(base),insertion(base),quick(base),merge(base)]}
+let sets=[];
+
+function renderArray(id,a,compare=[],change=[],extra={}){
+ const el=document.getElementById(id);el.innerHTML="";
+ a.forEach((v,i)=>{let d=document.createElement("div");d.className="bar";
+ if(compare.includes(i))d.classList.add("compare");if(change.includes(i))d.classList.add("change");
+ if(extra.pivot===i)d.classList.add("pivot");d.style.height=Math.max(12,v*1.05)+"px";
+ d.innerHTML="<span>"+v+"</span>";el.appendChild(d)})
+}
+function cardHTML(i){
+ return `<section class="card">
+ <h2>${names[i]}</h2><div class="sub" id="status${i}"></div>
+ <div class="bars" id="bars${i}"></div>
+ <div class="info">
+  <div class="box"><div class="label">Before</div><div class="value" id="before${i}"></div></div>
+  <div class="box"><div class="label">Compare / Focus</div><div class="value" id="compare${i}"></div></div>
+  <div class="box"><div class="label">Action</div><div class="value" id="action${i}"></div></div>
+  <div class="box"><div class="label">After</div><div class="value" id="after${i}"></div></div>
+  <div class="box" style="grid-column:1/3"><div class="label">Next</div><div class="value next" id="next${i}"></div></div>
+ </div>
+ <div class="complex" id="complex${i}"></div>
+ <div class="metrics"><span class="metric">Comparisons: <b id="cmp${i}">0</b></span><span class="metric">Changes: <b id="chg${i}">0</b></span><span class="metric">Step: <b id="step${i}">0</b>/<b id="total${i}">0</b></span></div>
+ <div class="history" id="hist${i}"></div>
+ <div class="previous-history">
+  <div class="exec-title">Previous Steps History</div>
+  <div class="previous-history-list" id="prevHistory${i}"></div>
+ </div>
+ <div class="execution" id="exec${i}">
+   <div class="exec-title">Step-by-step execution</div>
+   <div class="exec-block">
+     <div class="exec-heading">Previous Step</div>
+     <div class="exec-line" id="prevStep${i}"></div>
+     <div class="exec-line" id="prevCompare${i}"></div>
+     <div class="exec-line" id="prevAction${i}"></div>
+     <div class="exec-array" id="prevArray${i}"></div>
+   </div>
+   <div class="exec-block current">
+     <div class="exec-heading">Current Step</div>
+     <div class="exec-line" id="execStep${i}"></div>
+     <div class="exec-line" id="execCompare${i}"></div>
+     <div class="exec-line" id="execAction${i}"></div>
+     <div class="exec-array" id="execArray${i}"></div>
+   </div>
+   <div class="exec-block">
+     <div class="exec-heading">Next Step</div>
+     <div class="exec-line" id="nextExecStep${i}"></div>
+     <div class="exec-line" id="nextExecCompare${i}"></div>
+     <div class="exec-line" id="nextExecAction${i}"></div>
+     <div class="exec-array" id="nextExecArray${i}"></div>
+   </div>
+ </div>
+ </section>`
+}
+document.getElementById("grid").innerHTML=names.map((_,i)=>cardHTML(i)).join("");
+
+const complexity=[
+"Best O(n) • Avg O(n²) • Worst O(n²) • Space O(1)",
+"Best O(n²) • Avg O(n²) • Worst O(n²) • Space O(1)",
+"Best O(n) • Avg O(n²) • Worst O(n²) • Space O(1)",
+"Best O(n log n) • Avg O(n log n) • Worst O(n²) • Space O(log n) average",
+"Best O(n log n) • Avg O(n log n) • Worst O(n log n) • Space O(n)"
+];
+
+function fmt(a){return "["+a.join(", ")+"]"}
+function traceData(list,k){
+ if(k<0) return {step:"—",compare:"—",action:"No previous step",arr:"—"};
+ if(k>=list.length) return {step:"—",compare:"—",action:"No next step",arr:"—"};
+ const e=list[k];
+ let compare="—";
+ if(e.compare && e.compare.length) compare="Compare: "+e.compare.map(x=>e.arr[x]).join(" ↔ ");
+ else if(e.mergeCompare) compare="Compare: "+e.mergeCompare.join(" ↔ ");
+ else if(e.split) compare="Divide: "+e.text.replace("DIVIDE ","");
+ else if(e.pivot!==undefined) compare="Pivot: "+e.arr[e.pivot];
+ return {
+   step:k===0?"Initial":"Step "+k,
+   compare,
+   action:k===0?"Action: Start":"Action: "+e.text,
+   arr:fmt(e.arr)
+ };
+}
+function putTrace(prefix,i,d){
+ document.getElementById(prefix+"Step"+i).textContent=d.step+":";
+ document.getElementById(prefix+"Compare"+i).textContent=d.compare;
+ document.getElementById(prefix+"Action"+i).textContent=d.action;
+ document.getElementById(prefix+"Array"+i).textContent=d.arr;
+}
+function show(){
+ document.getElementById("globalStep").textContent=pos;
+ sets.forEach((list,i)=>{
+  let k=Math.min(pos,list.length-1),e=list[k],prevE=list[Math.max(0,k-1)];
+
+  document.getElementById("status"+i).textContent=e.text;
+  renderArray("bars"+i,e.arr,e.compare,e.change,e);
+  document.getElementById("before"+i).textContent=fmt(prevE.arr);
+
+  let compareText="—";
+  if(e.compare && e.compare.length) compareText=e.compare.map(x=>e.arr[x]).join(" ↔ ");
+  else if(e.mergeCompare) compareText=e.mergeCompare.join(" ↔ ");
+  else if(e.pivot!==undefined) compareText="Pivot = "+e.arr[e.pivot];
+  document.getElementById("compare"+i).textContent=compareText;
+
+  document.getElementById("action"+i).textContent=e.text;
+  document.getElementById("after"+i).textContent=fmt(e.arr);
+  document.getElementById("next"+i).textContent=k<list.length-1?list[k+1].text:"Finished";
+
+  document.getElementById("complex"+i).textContent=complexity[i];
+  document.getElementById("step"+i).textContent=k+1;
+  document.getElementById("total"+i).textContent=list.length;
+
+  document.getElementById("cmp"+i).textContent=
+    list.slice(0,k+1).filter(x=>(x.compare&&x.compare.length)||x.mergeCompare).length;
+  document.getElementById("chg"+i).textContent=
+    list.slice(0,k+1).filter(x=>x.change&&x.change.length).length;
+
+  let hs=Math.max(0,k-7);
+  document.getElementById("hist"+i).innerHTML=
+    list.slice(hs,k+1).map((x,n)=>`<div>${hs+n+1}. ${x.text}</div>`).join("");
+
+  // Show previous, current and next execution together.
+  putTrace("prev",i,traceData(list,k-1));
+  putTrace("exec",i,traceData(list,k));
+  putTrace("nextExec",i,traceData(list,k+1));
+
+  // Complete history of every step already executed.
+  const historyBox=document.getElementById("prevHistory"+i);
+  if(k===0){
+    historyBox.innerHTML='<div class="history-item"><span class="hstep">Initial</span><br><span class="harray">'+fmt(list[0].arr)+'</span></div>';
+  } else {
+    historyBox.innerHTML=list.slice(0,k+1).map((x,idx)=>{
+      let c="—";
+      if(x.compare && x.compare.length) c=x.compare.map(q=>x.arr[q]).join(" ↔ ");
+      else if(x.mergeCompare) c=x.mergeCompare.join(" ↔ ");
+      else if(x.split) c="Divide";
+      else if(x.pivot!==undefined) c="Pivot "+x.arr[x.pivot];
+      return '<div class="history-item"><span class="hstep">'+
+        (idx===0?"Initial":"Step "+idx)+
+        '</span> — '+x.text+
+        '<br><span>Compare/Focus: '+c+
+        '</span><br><span class="harray">'+fmt(x.arr)+'</span></div>';
+    }).join("");
+    historyBox.scrollTop=historyBox.scrollHeight;
+  }
+ });
+}
+
+function newArray(){pause();let n=Math.max(4,Math.min(14,+document.getElementById("size").value||8));base=randArray(n);pos=0;sets=allEvents();document.getElementById("original").innerHTML=base.map(x=>`<div class="num">${x}</div>`).join("");show()}
+function next(){if(pos<Math.max(...sets.map(x=>x.length))-1){pos++;show()}}
+function prev(){if(pos>0){pos--;show()}}
+function reset(){pause();pos=0;show()}
+function play(){if(timer)return;document.getElementById("playing").textContent="Yes";timer=setInterval(()=>{if(pos>=Math.max(...sets.map(x=>x.length))-1){pause();return}next()},+document.getElementById("speed").value)}
+function pause(){if(timer){clearInterval(timer);timer=null}document.getElementById("playing").textContent="No"}
+document.getElementById("speed").oninput=function(){speed=this.value;if(timer){pause();play()}}
+function toggleFull(){let e=document.getElementById("app");if(!document.fullscreenElement)e.requestFullscreen?.();else document.exitFullscreen?.()}
+newArray();
+</script>
+</body>
+</html>
